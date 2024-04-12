@@ -10,11 +10,14 @@ This project is a Gmail auto-reply bot that automatically categorizes incoming u
 
 ## Installation
 
- ** Clone the repository : Install dependencies **
- 
+ ** Clone the repository : **
+ ```bash
   - git clone https://github.com/Gunjanraj321/projectReach
+  ```  
+ ## Install dependencies 
+ ```bash
   - npm install
-
+```
 
 ## Set up environment variables:
  Mysql
@@ -37,9 +40,10 @@ This project is a Gmail auto-reply bot that automatically categorizes incoming u
 
 ## Usage :
  Run the Application:
+ ```bash
 - npm start
-
-  Navigate to http://localhost:3000/google in your browser to authenticate with Google and grant access to your Gmail account.
+```
+  Navigate to http://localhost:3000/auth/google in your browser to authenticate with Google and grant access to your Gmail account.
 After authentication, the bot will automatically categorize and reply to incoming emails in your Gmail inbox.
 
 
