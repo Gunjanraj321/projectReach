@@ -2,10 +2,8 @@ const express = require("express");
 const passport = require("passport");
 const { google } = require("googleapis");
 const { GoogleGenerativeAI } = require("@google/generative-ai");
-const { Queue } = require("bullmq");
+const { Queue, Worker } = require("bullmq");
 const { Redis } = require("ioredis");
-const axios = require("axios");
-const googleCallback = require('../services/oAuth');
 
 // Create Express router
 const googlerouter = express.Router();
@@ -29,7 +27,7 @@ const queue = new Queue("gmail-auto-reply-queue", {
 });
 
 // Function to categorize email
-const categorizeEmail = async (email) => {
+const mailCategory = async (email) => {
   try {
     const model = genAI.getGenerativeModel({ model: "gemini-pro" });
 
@@ -48,41 +46,40 @@ const categorizeEmail = async (email) => {
     return category;
   } catch (error) {
     console.error("Error categorizing email:", error);
-    // Default category in case of error
     return "More Information";
   }
 };
 
 // Function to generate auto-reply
-const generateAutoReply = async (category, emailSubject, emailBody, fromName, toName) => {
+const generateReply = async (category, emailSubject, emailBody, sendersName, receiverName) => {
   let request = "";
 
   switch (category) {
     case "Interested":
-      request = `Read ${emailBody} and write an email on behalf of ${toName}, Reachinbox asking ${fromName} if they are willing to hop on to a demo call by suggesting a time from Gunjan kumar`;
+      request = `Based on the information provided, compose an email on behalf of ${receiverName}, representing Reachinbox. The email should express gratitude for the recipient's interest and invite them to schedule a demo call. Suggest a suitable time for the call and sign off as Gunjan Kumar.`;
       break;
     case "Not Interested":
-      request = `Read ${emailBody} and write an email on behalf of ${toName}, Reachinbox thanking ${fromName} for their time and asking them if they would like to be contacted in the future from Gunjan kumar`;
+      request = `Based on the content provided, draft an email on behalf of ${receiverName}, representing Reachinbox. Express appreciation for the recipient's time and politely inquire if they would like to stay in touch for future opportunities. Sign off as Gunjan Kumar.`;
       break;
     case "More Information":
-      request = `Read ${emailBody} and write an email on behalf of ${toName}, Reachinbox asking ${fromName} if they would like more information about the product from Gunjan kumar`;
+      request = `Based on the provided details, craft an email on behalf of ${receiverName}, representing Reachinbox. Express interest in providing further information about the product and invite the recipient to reach out with any questions they may have. Sign off as Gunjan Kumar.`;
       break;
     default:
-      request = `Read ${emailBody} and write an email on behalf of ${toName}, Reachinbox asking ${fromName} if they are willing to hop on to a demo call by suggesting a time Gunjan kumar`;
+      request = `Based on the provided information, compose an email on behalf of ${receiverName}, representing Reachinbox. Invite the recipient to schedule a demo call and suggest a suitable time. Sign off as Gunjan Kumar.`;
   }
 
   return request;
 };
 
 // Function to send auto-reply
-const sendAutoReply = async (gmail, messageDetails) => {
+const sendReply = async (gmail, messageDetails) => {
   const messageId = messageDetails.id;
   const emailSubject = messageDetails.payload.headers.find(
     (header) => header.name === "Subject"
   ).value;
   const emailBody = messageDetails.snippet;
 
-  const category = await categorizeEmail({ subject: emailSubject, body: emailBody });
+  const category = await mailCategory({ subject: emailSubject, body: emailBody });
   console.log("Category:", category);
 
   const extractNameFromEmail = (emailAddress) => {
@@ -90,14 +87,14 @@ const sendAutoReply = async (gmail, messageDetails) => {
     return match ? match[1] : emailAddress; // Return the matched name or the full email address if no match
   };
 
-  const toName = extractNameFromEmail(
+  const receiverName = extractNameFromEmail(
     messageDetails.payload.headers.find((header) => header.name === "To").value
   );
-  const fromName = extractNameFromEmail(
+  const sendersName = extractNameFromEmail(
     messageDetails.payload.headers.find((header) => header.name === "From").value
   );
 
-  const request = await generateAutoReply(category, emailSubject, emailBody, fromName, toName);
+  const request = await generateReply(category, emailSubject, emailBody, sendersName, receiverName);
 
   // Generate reply using AI model
   const model = genAI.getGenerativeModel({ model: "gemini-pro" });
@@ -166,10 +163,26 @@ googlerouter.get("/gmail", async (req, res) => {
     refresh_token: refreshToken,
   });
 
+  
   const gmail = google.gmail({
     version: "v1",
     auth: oauth2Client,
   });
+
+  const worker = new Worker(
+    "gmail-auto-reply-queue",
+    async (job) => {
+      const { message } = job.data;
+      const messageDetails = await gmail.users.messages.get({
+        userId: "me",
+        id: message.id,
+        format: "full",
+      });
+      await sendReply(gmail, messageDetails.data);
+    },
+    { connection: connection }
+  );
+
 
   try {
     const response = await gmail.users.messages.list({
@@ -184,12 +197,7 @@ googlerouter.get("/gmail", async (req, res) => {
     }
 
     for (const message of messages) {
-      const messageDetails = await gmail.users.messages.get({
-        userId: "me",
-        id: message.id,
-        format: "full",
-      });
-      await sendAutoReply(gmail, messageDetails.data);
+      await queue.add("send-auto-reply", { message });
     }
 
     res.status(200).send("Auto reply enabled successfully!");
@@ -203,4 +211,3 @@ googlerouter.get("/gmail", async (req, res) => {
 
 // Export the router and callback handler
 module.exports = { googlerouter };
-

@@ -4,7 +4,7 @@ const session = require("express-session");
 const cors = require("cors");
 const { sequelize } = require("./db");
 const { googlerouter } = require("./routes/google");
-const passport = require("./services/passport");
+const passport = require("./utils/passport");
 
 const app = express();
 app.use(cors());

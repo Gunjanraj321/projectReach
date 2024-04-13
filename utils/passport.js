@@ -39,21 +39,4 @@ passport.use(
   )
 );
 
-// passport.use(
-//   new OutlookStrategy(
-//     {
-//       clientID: process.env.OUTLOOK_CLIENT_ID,
-//       clientSecret: process.env.OUTLOOK_CLIENT_SECRET,
-//       callbackURL: "https://localhost:3000/auth/outlook/callback",
-//       passReqToCallback: true,
-//     },
-//     (accessToken, refreshToken, profile, done) => {
-//       console.log("Google Profile:", profile);
-//       profile.tokens = { accessToken, refreshToken };
-
-//       return done(null, profile);
-//     }
-//   )
-// );
-
 module.exports = passport;
